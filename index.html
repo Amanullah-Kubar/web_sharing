@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" href="favicon.ico">
+    <title>FileShare - Secure File Exchange</title>
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap" rel="stylesheet">
+    
+
+
+    <!-- Load Supabase FIRST -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <script>
+        let files = [];
+        let currentPage;
+        if (!localStorage.getItem("currentPage")) {
+            localStorage.setItem("currentPage", "upload");
+            currentPage = "upload";
+        } else {
+            currentPage = localStorage.getItem("currentPage");
+        }
+
+        function connectSupabase() {
+            let url = 'https://njnnvhnpdycctgqcoqft.supabase.co';
+            let key = 'sb_publishable_VkrxWT6Dv7h9WQHrhaFbGw_d37p1umk';
+
+            supabase = window.supabase.createClient(url, key);
+            console.log("Connected to Supabase:", supabase);
+        }
+
+        function changePage() {
+            if (currentPage === "upload") {
+                currentPage = "download";
+            } else {
+                currentPage = "upload";
+            }
+            localStorage.setItem("currentPage", currentPage);
+            renderCurrentPage();
+        }
+
+        function renderCurrentPage() {
+            if (currentPage === "upload") {
+                document.getElementById("changePage").textContent = "📥 Switch to Download";
+
+                document.querySelector(".app").innerHTML = `
+                    <h1>📤 Upload Files</h1>
+                    <p class="subtitle">Share files securely with a unique code. Files expire after 24 hours.</p>
+                    <div class="upload-section">
+                        <label class="file-input-label" for="fileInput">
+                            <div class="upload-icon">📁</div>
+                            <div class="upload-text">
+                                <div class="primary">Click to upload or drag and drop</div>
+                                <div class="secondary">Select one or more files to share</div>
+                            </div>
+                        </label>
+                        <input type="file" id="fileInput" onchange="handleFiles(this.files)" multiple />
+                        <div class="file-list" id="fileList"></div>
+                        <button class="button button-primary" onclick="uploadFiles()">Share Files</button>
+                    </div>
+                `;
+                
+                document.getElementById("fileInput").addEventListener("dragover", (e) => {
+                    e.preventDefault();
+                    e.currentTarget.parentElement.style.background = "linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0.04) 100%)";
+                });
+                
+                document.getElementById("fileInput").addEventListener("dragleave", (e) => {
+                    e.currentTarget.parentElement.style.background = "";
+                });
+            } else {
+                document.getElementById("changePage").textContent = "📤 Switch to Upload";
+                document.querySelector(".app").innerHTML = `
+                    <h1>📥 Download Files</h1>
+                    <p class="subtitle">Enter the code you received to access shared files.</p>
+                    <div class="download-section">
+                        <div class="input-group">
+                            <label for="downloadCodeInput">Share Code</label>
+                            <input type="text" id="downloadCodeInput" placeholder="Enter code..." onchange="handleDownloadCode(this.value)" />
+                        </div>
+                        <button class="button button-primary" onclick="getFiles()">Retrieve Files</button>
+                        <div id="filesList"></div>
+                    </div>
+                `;
+            }
+        }
+
+        handleDownloadCode = (code) => {
+            localStorage.setItem("downloadCode", code);
+        }
+
+        getFiles = () => {
+            const code = localStorage.getItem("downloadCode");
+            if (!code) {
+                alert("Please enter a code first");
+                return;
+            }
+            supabase.from('files')
+                .select('*')
+                .eq('code', code)
+                .then(({ data, error }) => {
+                    if (error) {
+                        console.error("Error fetching files:", error);
+                        alert("Error fetching files");
+                    } else {
+                        console.log("Fetched files:", data);
+                        if (data.length === 0) {
+                            document.getElementById("filesList").innerHTML = `
+                                <div class="empty-state">
+                                    <div class="empty-state-icon">📭</div>
+                                    <p>No files found for this code. Please check and try again.</p>
+                                </div>
+                            `;
+                        } else {
+                            renderFiles(data);
+                        }
+                    }
+                });
+        }
+
+        renderFiles = (files) => {
+            const container = document.getElementById("filesList");
+            container.innerHTML = '';
+
+            const filesContainer = document.createElement('div');
+            filesContainer.classList.add('files-container');
+
+            files.forEach(file => {
+                const tile = document.createElement('a');
+                tile.classList.add('file-tile');
+                tile.href = file.file_url;
+                tile.target = "_blank";
+                
+                const iconMap = {
+                    'pdf': '📄',
+                    'doc': '📝',
+                    'docx': '📝',
+                    'xls': '📊',
+                    'xlsx': '📊',
+                    'ppt': '🎥',
+                    'pptx': '🎥',
+                    'zip': '🗜️',
+                    'rar': '🗜️',
+                    'jpg': '🖼️',
+                    'jpeg': '🖼️',
+                    'png': '🖼️',
+                    'gif': '🖼️',
+                    'mp4': '🎬',
+                    'mp3': '🎵',
+                };
+
+                const ext = file.file_name.split('.').pop().toLowerCase();
+                const icon = iconMap[ext] || '📎';
+
+                tile.innerHTML = `
+                    <div class="file-tile-icon">${icon}</div>
+                    <div class="file-tile-name">${file.file_name}</div>
+                `;
+
+                filesContainer.appendChild(tile);
+            });
+
+            container.appendChild(filesContainer);
+        }
+
+        function showClient() {
+            console.log("Supabase client:", supabase);
+        }
+
+        function createCode() {
+            return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 10);
+        }
+
+        function handleFiles(selectedFiles) {
+            files = [];
+            for (let i = 0; i < selectedFiles.length; i++) {
+                const file = selectedFiles[i];
+                files.push(file);
+            }
+            updateFileList();
+        }
+
+        function updateFileList() {
+            const fileList = document.getElementById("fileList");
+            if (!fileList) return;
+            
+            fileList.innerHTML = '';
+            files.forEach((file, index) => {
+                const badge = document.createElement('div');
+                badge.classList.add('file-badge');
+                badge.innerHTML = `
+                    ${file.name}
+                    <span class="remove" onclick="removeFile(${index})">×</span>
+                `;
+                fileList.appendChild(badge);
+            });
+        }
+
+        function removeFile(index) {
+            files.splice(index, 1);
+            updateFileList();
+        }
+
+        function showShareCode(code) {
+            const container = document.querySelector(".app");
+            const shareBox = document.createElement('div');
+            shareBox.classList.add('share-code-box');
+            shareBox.innerHTML = `
+                <div class="share-code-box-label">✅ Files Uploaded Successfully!</div>
+                <div class="share-code-hint">Share this code with others to let them download your files</div>
+                <div class="share-code-display">
+                    <div class="code-value">${code}</div>
+                    <button class="copy-button" onclick="copyToClipboard('${code}')">
+                        📋 Copy
+                    </button>
+                </div>
+                <div class="share-methods">
+                    <button class="share-method-btn" onclick="copyToClipboard('${code}')">
+                        📋 Copy Code
+                    </button>
+                    <button class="share-method-btn" onclick="shareViaEmail('${code}')">
+                        ✉️ Email
+                    </button>
+                    <button class="share-method-btn" onclick="shareViaWhatsApp('${code}')">
+                        💬 WhatsApp
+                    </button>
+                </div>
+            `;
+            container.appendChild(shareBox);
+        }
+
+        function copyToClipboard(code) {
+            navigator.clipboard.writeText(code).then(() => {
+                const btn = event.target;
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '✅ Copied!';
+                btn.classList.add('copied');
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.classList.remove('copied');
+                }, 2000);
+            }).catch(err => {
+                alert('Failed to copy code');
+                console.error(err);
+            });
+        }
+
+        function shareViaEmail(code) {
+            const subject = "Files shared with FileShare";
+            const body = `Hey! I've shared some files with you using FileShare.\n\nHere's your access code: ${code}\n\nJust paste it into the download section on the FileShare app to access the files.`;
+            window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        }
+
+        function shareViaWhatsApp(code) {
+            const message = `📁 *Files Shared!*\n\nI've shared some files with you using FileShare.\n\n*Code:* ${code}\n\nJust paste this code in the download section to access!`;
+            window.location.href = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+        }
+
+        function uploadFiles() {
+            if (files.length === 0) {
+                alert("Please select at least one file");
+                return;
+            }
+            
+            let code = createCode();
+            const uploadBtn = event.target;
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = "Uploading...";
+
+            let uploadedCount = 0;
+            
+            files.forEach(file => {
+                addFileToSupabase(file, code, () => {
+                    uploadedCount++;
+                    if (uploadedCount === files.length) {
+                        uploadBtn.disabled = false;
+                        uploadBtn.textContent = "Share Files";
+                        showShareCode(code);
+                        files = [];
+                        updateFileList();
+                    }
+                });
+            });
+        }
+
+        function addFileToSupabase(file, code, callback) {
+            const fileName = code + "_" + file.name;
+            const filePath = `files/${fileName}`;
+
+            supabase.storage.from('shareFile').upload(filePath, file)
+                .then(({ data, error }) => {
+                    if (error) {
+                        console.error("Error uploading file:", error);
+                        alert(`Error uploading ${file.name}`);
+                        callback();
+                    } else {
+                        const { data: { publicUrl } } = supabase.storage.from('shareFile').getPublicUrl(filePath);
+                        
+                        supabase.from('files')
+                            .insert([
+                                {
+                                    code: code,
+                                    file_url: publicUrl,
+                                    expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000),
+                                    file_name: file.name
+                                }])
+                            .then(({ data, error }) => {
+                                if (error) {
+                                    console.error("Error inserting file record:", error);
+                                } else {
+                                    console.log("File record inserted successfully:", data);
+                                    console.log(code);
+                                }
+                                callback();
+                            });
+                    }
+                });
+        }
+
+        window.onload = function () {
+            connectSupabase();
+            renderCurrentPage();
+            showClient();
+        }
+    </script>
+</head>
+
+<body>
+    <div class="header">
+        <div class="header-content">
+            <a href="#" class="logo">File<span>Share</span></a>
+            <button id="changePage" class="nav-button" onclick="changePage()">📥 Switch to Download</button>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="app"></div>
+    </div>
+</body>
+
+</html>
