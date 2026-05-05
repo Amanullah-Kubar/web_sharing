@@ -7,10 +7,12 @@
     <link rel="stylesheet" href="styles.css">
     <link rel="icon" href="favicon.ico">
     <title>X-Share</title>
-    
+
     <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap" rel="stylesheet">
-    
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap"
+        rel="stylesheet">
+
 
 
     <!-- Load Supabase FIRST -->
@@ -64,12 +66,12 @@
                         <button class="button button-primary" onclick="uploadFiles()">Share Files</button>
                     </div>
                 `;
-                
+
                 document.getElementById("fileInput").addEventListener("dragover", (e) => {
                     e.preventDefault();
                     e.currentTarget.parentElement.style.background = "linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0.04) 100%)";
                 });
-                
+
                 document.getElementById("fileInput").addEventListener("dragleave", (e) => {
                     e.currentTarget.parentElement.style.background = "";
                 });
@@ -135,7 +137,7 @@
                 tile.classList.add('file-tile');
                 tile.href = file.file_url;
                 tile.target = "_blank";
-                
+
                 const iconMap = {
                     'pdf': '📄',
                     'doc': '📝',
@@ -173,7 +175,7 @@
         }
 
         function createCode() {
-            return Math.random().toString(36).substring(2, 8) ;
+            return Math.random().toString(36).substring(2, 8);
         }
 
         function handleFiles(selectedFiles) {
@@ -188,7 +190,7 @@
         function updateFileList() {
             const fileList = document.getElementById("fileList");
             if (!fileList) return;
-            
+
             fileList.innerHTML = '';
             files.forEach((file, index) => {
                 const badge = document.createElement('div');
@@ -266,14 +268,14 @@
                 alert("Please select at least one file");
                 return;
             }
-            
+
             let code = createCode();
             const uploadBtn = event.target;
             uploadBtn.disabled = true;
             uploadBtn.textContent = "Uploading...";
 
             let uploadedCount = 0;
-            
+
             files.forEach(file => {
                 addFileToSupabase(file, code, () => {
                     uploadedCount++;
@@ -300,14 +302,15 @@
                         callback();
                     } else {
                         const { data: { publicUrl } } = supabase.storage.from('shareFile').getPublicUrl(filePath);
-                        
+
                         supabase.from('files')
                             .insert([
                                 {
                                     code: code,
                                     file_url: publicUrl,
-                                    expires_at: new Date(Date.now() + 1 * 60 * 60 * 1000),
-                                    file_name: file.name
+                                    expires_at: new Date(Date.now() + 1    * 60 * 60 * 1000),
+                                    file_name: file.name,
+                                    file_path: filePath
                                 }])
                             .then(({ data, error }) => {
                                 if (error) {
@@ -322,10 +325,88 @@
                 });
         }
 
+        async function cleanupJob() {
+            try {
+
+                const { data } = await supabase
+                    .storage
+                    .from('shareFile')
+                    .list('files', { limit: 1000, offset: 0 });
+
+                console.log(data);
+
+                // 1. Delete expired DB rows
+                const { error: expErr } = await supabase
+                    .from('files')
+                    .delete()
+                    .lte('expires_at', new Date().toISOString());
+
+                if (expErr) throw expErr;
+
+                console.log("Expired DB rows deleted");
+
+                // 2. Get valid file paths from DB
+                const { data: validFiles, error: fetchErr } = await supabase
+                    .from('files')
+                    .select('file_path');
+
+                if (fetchErr) throw fetchErr;
+
+                const validSet = new Set(validFiles.map(f => f.file_path));
+
+                console.log("Valid paths:", validSet);
+
+                // 3. Get ALL files from storage (pagination safe)
+                let allStorageFiles = [];
+                let offset = 0;
+                const limit = 1000;
+
+                while (true) {
+                    const { data, error } = await supabase
+                        .storage
+                        .from('shareFile')
+                        .list('files', { limit, offset });
+
+                    if (error) throw error;
+
+                    allStorageFiles = allStorageFiles.concat(data);
+
+                    if (data.length < limit) break;
+                    offset += limit;
+                }
+
+                console.log("Total storage files:", allStorageFiles.length);
+
+                // 4. Find orphan files (not in DB)
+                const toDelete = allStorageFiles
+                    .map(file => `files/${file.name}`)
+                    .filter(path => !validSet.has(path));
+
+                console.log("Files to delete:", toDelete);
+
+                // 5. Delete them
+                if (toDelete.length > 0) {
+                    const { data, error } = await supabase
+                        .storage
+                        .from('shareFile')
+                        .remove(toDelete);
+
+                    if (error) throw error;
+
+                    console.log("Deleted files:", data);
+                } else {
+                    console.log("No files to delete");
+                }
+
+            } catch (err) {
+                console.error("❌ Cleanup failed:", err);
+            }
+        }
         window.onload = function () {
             connectSupabase();
             renderCurrentPage();
             showClient();
+            cleanupJob();
         }
     </script>
 </head>
@@ -337,7 +418,7 @@
             <button id="changePage" class="nav-button" onclick="changePage()">📥 Switch to Download</button>
         </div>
     </div>
-    
+
     <div class="container">
         <div class="app"></div>
     </div>
