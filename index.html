@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="styles.css">
     <link rel="icon" href="favicon.ico">
-    <title>FileShare - Secure File Exchange</title>
+    <title>X-Share</title>
     
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap" rel="stylesheet">
@@ -306,7 +306,7 @@
                                 {
                                     code: code,
                                     file_url: publicUrl,
-                                    expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000),
+                                    expires_at: new Date(Date.now() + 1 * 60 * 60 * 1000),
                                     file_name: file.name
                                 }])
                             .then(({ data, error }) => {
@@ -333,7 +333,7 @@
 <body>
     <div class="header">
         <div class="header-content">
-            <a href="#" class="logo">File<span>Share</span></a>
+            <a href="#" class="logo">X<span>Share</span></a>
             <button id="changePage" class="nav-button" onclick="changePage()">📥 Switch to Download</button>
         </div>
     </div>
