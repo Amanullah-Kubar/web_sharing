@@ -402,6 +402,7 @@
                 console.error("❌ Cleanup failed:", err);
             }
         }
+        setInterval(cleanupJob, 60 * 60 * 1000);
         window.onload = function () {
             connectSupabase();
             renderCurrentPage();
